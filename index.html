@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <!-- Prevence mezipaměti (Cache Control) -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="H5One">
+    <meta name="theme-color" content="#05070a">
+    <title>H5One v1.1.1</title>
+    
+    <link rel="manifest" href="manifest.json?v=1.1.1">
+    <link rel="apple-touch-icon" href="icon-192x192.png">
+
+    <!-- Verzování externích knihoven pro vynucení stažení -->
+    <script src="https://unpkg.com/lucide@latest?v=1.1.1"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js?v=1.1.1"></script>
+    
+    <style>
+        :root {
+            --bg-color: #05070a;
+            --accent: #ffffff;
+            --text: #ffffff;
+            --menu-bg: rgba(10, 15, 25, 0.98);
+            --square-size: 55px;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; }
+        body, html { 
+            margin: 0; padding: 0; height: 100%; 
+            font-family: 'Inter', system-ui, sans-serif; 
+            background: var(--bg-color);
+            color: var(--text);
+            overflow: hidden;
+        }
+
+        /* Skleněný spouštěč (Trigger) */
+        #main-trigger {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: var(--square-size);
+            height: var(--square-size);
+            z-index: 10001;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border-bottom-right-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-top: none;
+            border-left: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            margin-top: env(safe-area-inset-top, 0);
+        }
+
+        #trigger-inner {
+            width: 14px;
+            height: 14px;
+            background: #fff;
+            mix-blend-mode: difference;
+            transition: all 0.3s ease;
+        }
+
+        #main-trigger.is-app {
+            clip-path: polygon(0 0, 100% 0, 0 100%);
+            border-radius: 0;
+            background: rgba(255, 255, 255, 0.15);
+            justify-content: flex-start;
+            align-items: flex-start;
+            padding: 12px;
+        }
+
+        #main-trigger.is-app #trigger-inner {
+            clip-path: polygon(0 0, 100% 0, 0 100%);
+            width: 12px;
+            height: 12px;
+        }
+
+        #system-overlay {
+            position: fixed; inset: 0;
+            background: var(--menu-bg);
+            backdrop-filter: blur(40px);
+            -webkit-backdrop-filter: blur(40px);
+            z-index: 9000;
+            display: none;
+            padding: calc(60px + env(safe-area-inset-top, 20px)) 20px 40px;
+            overflow-y: auto;
+        }
+        #system-overlay.active { display: block; }
+
+        .container { max-width: 480px; margin: 0 auto; }
+        
+        .action-btn {
+            width: 100%;
+            padding: 20px;
+            margin-bottom: 15px;
+            background: rgba(255, 255, 255, 0.07);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            transition: 0.2s;
+        }
+        .action-btn:active { background: rgba(255, 255, 255, 0.15); transform: scale(0.98); }
+        .action-btn.danger { color: #ff5e5e; border-color: rgba(255, 94, 94, 0.2); }
+        .action-btn.success { background: rgba(0, 255, 123, 0.1); border-color: rgba(0, 255, 123, 0.2); color: #00ff7b; }
+        
+        #app-viewport {
+            position: fixed; inset: 0;
+            z-index: 500;
+            background: #000;
+            display: none;
+        }
+        #app-viewport.active { display: block; }
+        iframe { width: 100%; height: 100%; border: none; }
+
+        .header-title {
+            font-size: 32px;
+            font-weight: 900;
+            margin-bottom: 10px;
+            letter-spacing: -1.5px;
+            color: white;
+        }
+
+        #file-input { display: none; }
+
+        .app-item {
+            display: flex;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 18px;
+            margin-bottom: 12px;
+            border: 1px solid rgba(255,255,255,0.08);
+            transition: 0.2s;
+        }
+        .app-item:active { background: rgba(255, 255, 255, 0.08); }
+        
+        .app-link {
+            flex: 1;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            cursor: pointer;
+        }
+        
+        .delete-btn {
+            padding: 20px;
+            color: rgba(255, 94, 94, 0.5);
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .delete-btn:active { color: #ff5e5e; background: rgba(255, 94, 94, 0.1); border-radius: 0 18px 18px 0; }
+
+        .info-card {
+            background: rgba(255,255,255,0.03);
+            border-radius: 20px;
+            padding: 25px;
+            margin-top: 40px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            margin-bottom: 12px;
+            color: rgba(255,255,255,0.5);
+        }
+        .info-row strong { color: white; }
+
+        #storage-bar {
+            height: 4px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 2px;
+            margin-top: 15px;
+            overflow: hidden;
+        }
+        #storage-fill {
+            height: 100%;
+            background: var(--accent);
+            width: 0%;
+            transition: width 0.5s ease;
+        }
+        
+        #pwa-install-btn { display: none; margin-top: 25px; animation: fadeIn 0.5s ease forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+    <div id="main-trigger">
+        <div id="trigger-inner"></div>
+    </div>
+
+    <div id="app-viewport"></div>
+
+    <div id="system-overlay">
+        <div class="container">
+            <h1 class="header-title">H5One</h1>
+            <p style="font-size: 12px; opacity: 0.5; margin-bottom: 30px; margin-top: -5px;">Build 2024.03.v2 (Auto-Start Enabled)</p>
+
+            <button class="action-btn" id="install-btn">
+                <i data-lucide="plus"></i> Instalovat aplikaci (*.h5ap, *.h5az)
+            </button>
+
+            <button id="close-app-btn" class="action-btn danger" style="display:none;">
+                <i data-lucide="x"></i> Ukončit aktuální aplikaci
+            </button>
+
+            <div style="margin-top: 40px;">
+                <p style="font-size: 11px; opacity: 0.4; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 15px; padding-left: 5px;">Knihovna</p>
+                <div id="app-list"></div>
+            </div>
+
+            <div class="info-card">
+                <div class="info-row">
+                    <strong>Verze OS</strong>
+                    <span>1.1.1 Stable</span>
+                </div>
+                <div class="info-row">
+                    <strong>Úložiště</strong>
+                    <span id="storage-txt">0 MB / 5 MB</span>
+                </div>
+                <div id="storage-bar"><div id="storage-fill"></div></div>
+                
+                <p style="margin-top:20px; font-size:12px; color:rgba(255,255,255,0.4); line-height:1.5;">
+                    Všechna data zůstávají v zařízení. Podpora offline režimu. Pokud se změny neprojeví, klikněte na Resetovat systém.
+                </p>
+
+                <button class="action-btn success" id="pwa-install-btn">
+                    <i data-lucide="download"></i> Nainstalovat jako aplikaci
+                </button>
+
+                <button class="action-btn danger" id="reset-system-btn" style="margin-top: 25px; padding: 15px; font-size: 14px; background: rgba(255, 94, 94, 0.1);">
+                    <i data-lucide="trash-2" size="16"></i> Resetovat systém
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <input type="file" id="file-input" accept=".html,.zip,.h5ap,.h5az">
+
+    <script>
+        const CURRENT_VERSION = '1.1.1';
+        const STORAGE_KEY = 'h5one_v10_data';
+        const VERSION_KEY = 'h5one_version_check';
+
+        let state = JSON.parse(localStorage.getItem(STORAGE_KEY)) || { apps: [], lastRunId: null };
+        let isAppRunning = false;
+        let isMenuOpen = true;
+        let currentBlobUrls = [];
+        let deferredPrompt;
+
+        const viewport = document.getElementById('app-viewport');
+        const trigger = document.getElementById('main-trigger');
+        const overlay = document.getElementById('system-overlay');
+        const fileInput = document.getElementById('file-input');
+        const closeAppBtn = document.getElementById('close-app-btn');
+        const pwaInstallBtn = document.getElementById('pwa-install-btn');
+
+        window.onload = () => {
+            checkVersionAndReload();
+            renderAppList();
+            
+            // LOGIKA AUTOMATICKÉHO SPUŠTĚNÍ
+            if (state.apps.length > 0) {
+                // Pokud máme aplikace, spustíme tu naposledy spuštěnou nebo prostě poslední v seznamu
+                const appToRun = state.apps.find(a => a.id === state.lastRunId) || state.apps[state.apps.length - 1];
+                runApp(appToRun);
+            } else {
+                updateUI(); // Ukáže menu, protože není co spustit
+            }
+            
+            trigger.onclick = toggleMenu;
+            document.getElementById('install-btn').onclick = () => fileInput.click();
+            document.getElementById('reset-system-btn').onclick = resetSystem;
+            closeAppBtn.onclick = closeApp;
+
+            const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+            window.addEventListener('beforeinstallprompt', (e) => {
+                if (isStandalone) return;
+                e.preventDefault();
+                deferredPrompt = e;
+                pwaInstallBtn.style.display = 'flex';
+            });
+
+            pwaInstallBtn.onclick = async () => {
+                if (deferredPrompt) {
+                    deferredPrompt.prompt();
+                    const { outcome } = await deferredPrompt.userChoice;
+                    if (outcome === 'accepted') pwaInstallBtn.style.display = 'none';
+                    deferredPrompt = null;
+                }
+            };
+        };
+
+        function checkVersionAndReload() {
+            const lastVersion = localStorage.getItem(VERSION_KEY);
+            if (lastVersion !== CURRENT_VERSION) {
+                localStorage.setItem(VERSION_KEY, CURRENT_VERSION);
+                if (lastVersion !== null) {
+                    window.location.href = window.location.pathname + '?v=' + CURRENT_VERSION + '&t=' + Date.now();
+                }
+            }
+        }
+
+        function save() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+            updateStorageStats();
+        }
+
+        function updateStorageStats() {
+            const size = (JSON.stringify(state).length / 1024 / 1024).toFixed(2);
+            const percentage = Math.min((size / 5) * 100, 100);
+            document.getElementById('storage-txt').textContent = `${size} MB / 5 MB`;
+            document.getElementById('storage-fill').style.width = percentage + '%';
+        }
+
+        function updateUI() {
+            if (!isAppRunning) {
+                isMenuOpen = true;
+                overlay.classList.add('active');
+                trigger.classList.remove('is-app');
+                closeAppBtn.style.display = 'none';
+            } else {
+                if (isMenuOpen) {
+                    overlay.classList.add('active');
+                    trigger.classList.remove('is-app');
+                    closeAppBtn.style.display = 'flex';
+                } else {
+                    overlay.classList.remove('active');
+                    trigger.classList.add('is-app');
+                }
+            }
+            updateStorageStats();
+            if (window.lucide) lucide.createIcons();
+        }
+
+        function toggleMenu() {
+            if (!isAppRunning) return;
+            isMenuOpen = !isMenuOpen;
+            updateUI();
+        }
+
+        fileInput.onchange = async (e) => {
+            const file = e.target.files[0];
+            if(!file) return;
+            const ext = file.name.split('.').pop().toLowerCase();
+            const reader = new FileReader();
+            const isZipPackage = ['zip','h5az'].includes(ext);
+
+            reader.onload = async (ev) => {
+                const app = {
+                    id: Date.now(),
+                    name: file.name.replace(/\.(html|zip|h5ap|h5az)$/, ''),
+                    content: ev.target.result,
+                    type: isZipPackage ? 'zip' : 'html'
+                };
+                state.apps.push(app);
+                state.lastRunId = app.id;
+                save();
+                renderAppList();
+                runApp(app);
+            };
+
+            if(isZipPackage) reader.readAsDataURL(file);
+            else reader.readAsText(file);
+        };
+
+        async function runApp(app) {
+            if (!app) return;
+            clearBlobs();
+            viewport.innerHTML = '';
+            viewport.classList.add('active');
+            isAppRunning = true;
+            isMenuOpen = false;
+            
+            state.lastRunId = app.id;
+            save();
+
+            const ifr = document.createElement('iframe');
+            viewport.appendChild(ifr);
+
+            if(app.type === 'html') {
+                ifr.srcdoc = app.content;
+            } else {
+                try {
+                    const zipData = app.content.split(',')[1];
+                    const zip = await JSZip.loadAsync(zipData, {base64: true});
+                    const blobUrls = {};
+                    
+                    for (const [path, file] of Object.entries(zip.files)) {
+                        if (!file.dir) {
+                            const blob = await file.async("blob");
+                            const url = URL.createObjectURL(blob);
+                            blobUrls[path] = url;
+                            currentBlobUrls.push(url);
+                        }
+                    }
+
+                    const indexFile = zip.file("index.html") || 
+                                     Object.values(zip.files).find(f => f.name.endsWith('index.html'));
+                    
+                    if (indexFile) {
+                        let html = await indexFile.async("string");
+                        const basePath = indexFile.name.substring(0, indexFile.name.lastIndexOf('/') + 1);
+
+                        Object.keys(blobUrls).forEach(fullPath => {
+                            let relativePath = fullPath;
+                            if (fullPath.startsWith(basePath)) {
+                                relativePath = fullPath.replace(basePath, '');
+                            }
+                            const escapedRelPath = relativePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                            const escapedFullPath = fullPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                            const pattern = new RegExp(`(?<=src=["']|href=["']|url\\(['"]?)(?:\\.\\/)?(?:${escapedRelPath}|${escapedFullPath})(?=["']|['"]?\\))`, 'g');
+                            html = html.replace(pattern, blobUrls[fullPath]);
+                        });
+                        ifr.srcdoc = html;
+                    } else {
+                        ifr.srcdoc = "<h1>Error: index.html not found</h1>";
+                    }
+                } catch(e) { 
+                    console.error(e);
+                    ifr.srcdoc = "<h1>Error parsing ZIP package</h1>";
+                }
+            }
+            updateUI();
+        }
+
+        function closeApp() {
+            clearBlobs();
+            viewport.innerHTML = '';
+            viewport.classList.remove('active');
+            isAppRunning = false;
+            isMenuOpen = true;
+            state.lastRunId = null; // Při ručním ukončení zapomeneme poslední spuštěnou pro příští start
+            save();
+            updateUI();
+        }
+
+        function clearBlobs() {
+            currentBlobUrls.forEach(url => URL.revokeObjectURL(url));
+            currentBlobUrls = [];
+        }
+
+        function renderAppList() {
+            const list = document.getElementById('app-list');
+            list.innerHTML = '';
+            
+            if(state.apps.length === 0) {
+                list.innerHTML = '<p style="font-size:13px; opacity:0.3; text-align:center; padding:20px;">Žádné aplikace</p>';
+                return;
+            }
+
+            state.apps.forEach((app, idx) => {
+                const item = document.createElement('div');
+                item.className = 'app-item';
+                
+                const link = document.createElement('div');
+                link.className = 'app-link';
+                link.innerHTML = `<i data-lucide="layers" size="18"></i><span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;">${app.name}</span>`;
+                link.onclick = () => runApp(app);
+
+                const del = document.createElement('div');
+                del.className = 'delete-btn';
+                del.innerHTML = `<i data-lucide="trash-2" size="18"></i>`;
+                del.onclick = (e) => {
+                    e.stopPropagation();
+                    if(confirm(`Smazat aplikaci "${app.name}"?`)) {
+                        state.apps.splice(idx, 1);
+                        if (state.lastRunId === app.id) state.lastRunId = null;
+                        save();
+                        renderAppList();
+                    }
+                };
+
+                item.appendChild(link);
+                item.appendChild(del);
+                list.appendChild(item);
+            });
+            if (window.lucide) lucide.createIcons();
+        }
+
+        async function resetSystem() { 
+            if(confirm("SMAZAT VŠE? Akce odstraní všechny nahrané aplikace a data. Systém bude vyčištěn z cache.")) { 
+                localStorage.clear(); 
+                if ('caches' in window) {
+                    const names = await caches.keys();
+                    await Promise.all(names.map(name => caches.delete(name)));
+                }
+                if ('serviceWorker' in navigator) {
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    await Promise.all(registrations.map(reg => reg.unregister()));
+                }
+                window.location.href = window.location.pathname + '?reset=' + Date.now();
+            } 
+        }
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./service-worker.js?v=' + CURRENT_VERSION)
+                    .then(reg => {
+                        console.log('H5One PWA: Active');
+                        reg.update();
+                    })
+                    .catch(err => console.log('H5One PWA: Fail', err));
+            });
+        }
+    </script>
+</body>
+</html>
